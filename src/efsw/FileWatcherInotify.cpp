@@ -256,7 +256,7 @@ void FileWatcherInotify::removeWatch( WatchID watchid ) {
 
 void FileWatcherInotify::watch() {
 	if ( NULL == mThread ) {
-		mThread = new Thread( &FileWatcherInotify::run, this );
+		mThread = new Thread([this]{run();});
 		mThread->launch();
 	}
 }
