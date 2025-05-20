@@ -3,6 +3,7 @@
 #include <efsw/Lock.hpp>
 #include <efsw/String.hpp>
 #include <efsw/System.hpp>
+#include <cassert>
 
 #if EFSW_PLATFORM == EFSW_PLATFORM_WIN32
 
@@ -18,13 +19,16 @@ FileWatcherWin32::FileWatcherWin32( FileWatcher* parent ) :
 FileWatcherWin32::~FileWatcherWin32() {
 	mInitOK = false;
 
+	removeAllWatches();
+
 	if ( mIOCP && mIOCP != INVALID_HANDLE_VALUE ) {
 		PostQueuedCompletionStatus( mIOCP, 0, reinterpret_cast<ULONG_PTR>( this ), NULL );
 	}
 
 	efSAFE_DELETE( mThread );
 
-	removeAllWatches();
+	assert(mWatches.empty());
+	assert(mWatchesDestroyQueue.empty());
 
 	if ( mIOCP )
 		CloseHandle( mIOCP );
@@ -107,7 +111,7 @@ void FileWatcherWin32::removeWatch( WatchID watchid ) {
 void FileWatcherWin32::removeWatch( WatcherStructWin32* watch ) {
 	Lock lock( mWatchesLock );
 
-	DestroyWatch( watch );
+	DestroyWatch( watch, mWatchesDestroyQueue, mWatchesDestroyQueueLock );
 	mWatches.erase( watch );
 }
 
@@ -124,7 +128,7 @@ void FileWatcherWin32::removeAllWatches() {
 	Watches::iterator iter = mWatches.begin();
 
 	for ( ; iter != mWatches.end(); ++iter ) {
-		DestroyWatch( ( *iter ) );
+		DestroyWatch( ( *iter ), mWatchesDestroyQueue, mWatchesDestroyQueueLock );
 	}
 
 	mWatches.clear();
@@ -132,14 +136,29 @@ void FileWatcherWin32::removeAllWatches() {
 
 void FileWatcherWin32::run() {
 	do {
-		if ( mInitOK && !mWatches.empty() ) {
+		bool empty = false;
+		{
+			Lock lock( mWatchesLock );
+			empty = mWatches.empty();
+		}
+
+		if ( mInitOK && !empty ) {
 			DWORD numOfBytes = 0;
 			OVERLAPPED* ov = NULL;
 			ULONG_PTR compKey = 0;
 			BOOL res = FALSE;
 
-			while ( ( res = GetQueuedCompletionStatus( mIOCP, &numOfBytes, &compKey, &ov,
-													   INFINITE ) ) != FALSE ) {
+			while ( true ) {
+				res = GetQueuedCompletionStatus( mIOCP, &numOfBytes, &compKey, &ov, INFINITE );
+				{
+					Lock lock( mWatchesDestroyQueueLock );
+					for (auto& pWatch : mWatchesDestroyQueue)
+						efSAFE_DELETE( pWatch );
+					mWatchesDestroyQueue.clear();
+				}
+				if (!res)
+					break;
+
 				if ( compKey != 0 && compKey == reinterpret_cast<ULONG_PTR>( this ) ) {
 					break;
 				} else {
@@ -154,6 +173,11 @@ void FileWatcherWin32::run() {
 	} while ( mInitOK );
 
 	removeAllWatches();
+
+	Lock lock( mWatchesDestroyQueueLock );
+	for (auto& pWatch : mWatchesDestroyQueue)
+		efSAFE_DELETE( pWatch );
+	mWatchesDestroyQueue.clear();
 }
 
 void FileWatcherWin32::handleAction( Watcher* watch, const std::string& filename,

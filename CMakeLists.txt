@@ -186,6 +186,10 @@ if(BUILD_TEST_APP)
 	add_executable(efsw-test src/test/efsw-test.cpp)
 	target_link_libraries(efsw-test efsw-static)
 
+	# C++ torture test application to find Win32 race condition
+	add_executable(efsw-crash-test src/test/efsw-crash-test.cpp)
+	target_link_libraries(efsw-crash-test efsw-static)
+
 	# C test application
 	add_executable(efsw-test-stdc src/test/efsw-test.c)
 	target_link_libraries(efsw-test-stdc efsw-static)

@@ -39,7 +39,7 @@ RefreshResult RefreshWatch( WatcherStructWin32* pWatch );
 
 void CALLBACK WatchCallback( DWORD dwNumberOfBytesTransfered, LPOVERLAPPED lpOverlapped );
 
-void DestroyWatch( WatcherStructWin32* pWatch );
+void DestroyWatch( WatcherStructWin32* pWatch, std::vector<WatcherStructWin32*>& destroyQueue, Mutex& destroyQueueLock );
 
 WatcherStructWin32* CreateWatch( LPCWSTR szDirectory, bool recursive,
 							     DWORD bufferSize, DWORD notifyFilter, HANDLE iocp );

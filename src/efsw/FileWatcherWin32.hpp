@@ -47,6 +47,8 @@ class FileWatcherWin32 : public FileWatcherImpl {
   protected:
 	HANDLE mIOCP;
 	Watches mWatches;
+	Mutex mWatchesDestroyQueueLock;
+	std::vector<WatcherStructWin32*> mWatchesDestroyQueue;
 
 	/// The last watchid
 	WatchID mLastWatchID;

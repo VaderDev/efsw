@@ -1,4 +1,5 @@
 #include <efsw/Debug.hpp>
+#include <efsw/Lock.hpp>
 #include <efsw/String.hpp>
 #include <efsw/WatcherWin32.hpp>
 
@@ -218,7 +219,7 @@ RefreshResult RefreshWatch( WatcherStructWin32* pWatch ) {
 }
 
 /// Stops monitoring a directory.
-void DestroyWatch( WatcherStructWin32* pWatch ) {
+void DestroyWatch( WatcherStructWin32* pWatch, std::vector<WatcherStructWin32*>& destroyQueue, Mutex& destroyQueueLock ) {
 	if ( pWatch ) {
 		WatcherWin32* tWatch = pWatch->Watch;
 		tWatch->StopNow = true;
@@ -226,7 +227,13 @@ void DestroyWatch( WatcherStructWin32* pWatch ) {
 		CloseHandle( pWatch->Watch->DirHandle );
 		efSAFE_DELETE_ARRAY( pWatch->Watch->DirName );
 		efSAFE_DELETE( pWatch->Watch );
-		efSAFE_DELETE( pWatch );
+		// efSAFE_DELETE( pWatch );
+		{
+			// pWatch delete is deferred to the FileWatcher thread so the overlapped struct is kept alive
+			//		Requiring this might be an MSYS2 bug around the Win32 API, regardless this solves my issue
+			Lock lock( destroyQueueLock );
+			destroyQueue.emplace_back( pWatch );
+		}
 	}
 }
 
